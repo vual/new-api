@@ -21,6 +21,8 @@ import {
 import Title from '@douyinfe/semi-ui/lib/es/typography/title';
 import Text from '@douyinfe/semi-ui/lib/es/typography/text';
 import { Link } from 'react-router-dom';
+import {QRCode} from "antd";
+import Countdown from "antd/es/statistic/Countdown";
 
 const TopUp = () => {
   const [redemptionCode, setRedemptionCode] = useState('');
@@ -35,6 +37,13 @@ const TopUp = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [open, setOpen] = useState(false);
   const [payWay, setPayWay] = useState('');
+  const [payType, setPayType] = useState(''); // easy wx;
+
+  const [wxpayOpen, setWxpayOpen] = useState(false);
+  const [status, setStatus] = useState("loading");
+  const [timeId, setTimeId] = useState(0);
+  const [qrCodeUrl, setQrCodeUrl] = useState("https://ai.annyun.cn");
+  const [deadline, setDeadLine] = useState(0);
 
   const topUp = async () => {
     if (redemptionCode === '') {
@@ -100,7 +109,11 @@ const TopUp = () => {
     }
     setOpen(false);
     try {
-      const res = await API.post('/api/user/pay', {
+      let url = '/api/user/pay';
+      if (payType == "wx") {
+        url = '/api/user/wxpay';
+      }
+      const res = await API.post(url, {
         amount: parseInt(topUpCount),
         top_up_code: topUpCode,
         payment_method: payWay,
@@ -109,28 +122,44 @@ const TopUp = () => {
         const { message, data } = res.data;
         // showInfo(message);
         if (message === 'success') {
-          let params = data;
-          let url = res.data.url;
-          let form = document.createElement('form');
-          form.action = url;
-          form.method = 'POST';
-          // 判断是否为safari浏览器
-          let isSafari =
-            navigator.userAgent.indexOf('Safari') > -1 &&
-            navigator.userAgent.indexOf('Chrome') < 1;
-          if (!isSafari) {
-            form.target = '_blank';
+          if (payType == "easy") {
+            let params = data;
+            let url = res.data.url;
+            let form = document.createElement('form');
+            form.action = url;
+            form.method = 'POST';
+            // 判断是否为safari浏览器
+            let isSafari =
+              navigator.userAgent.indexOf('Safari') > -1 &&
+              navigator.userAgent.indexOf('Chrome') < 1;
+            if (!isSafari) {
+              form.target = '_blank';
+            }
+            for (let key in params) {
+              let input = document.createElement('input');
+              input.type = 'hidden';
+              input.name = key;
+              input.value = params[key];
+              form.appendChild(input);
+            }
+            document.body.appendChild(form);
+            form.submit();
+            document.body.removeChild(form);
           }
-          for (let key in params) {
-            let input = document.createElement('input');
-            input.type = 'hidden';
-            input.name = key;
-            input.value = params[key];
-            form.appendChild(input);
+          else {
+            setWxpayOpen(true);
+            setQrCodeUrl(res.data.url);
+            setDeadLine(Date.now() + 5 * 60 * 1000);
+            setStatus("active");
+            // 定时查询订单状态。
+            const startTime = new Date().getTime();
+            let intervalId= setInterval(
+              () => checkOrder(startTime, intervalId, res.data.data),
+              6000,
+            );
+            setTimeId(intervalId);
           }
-          document.body.appendChild(form);
-          form.submit();
-          document.body.removeChild(form);
+
         } else {
           showError(data);
           // setTopUpCount(parseInt(res.data.count));
@@ -143,6 +172,29 @@ const TopUp = () => {
       console.log(err);
     } finally {
     }
+  };
+
+  const checkOrder = async (startTime, intervalId, orderId) => {
+    if (new Date().getTime() > startTime + 5 * 60 * 1000) {
+      window.clearInterval(intervalId);
+      setWxpayOpen(false);
+    } else {
+      const res = await API.get('/api/user/checkOrder?orderId=' + orderId);
+      if (!res) {
+        showError("查询订单状态失败");
+      } else if (res.data == "success") {
+        showSuccess("支付成功！");
+        setTimeout(() => {
+          window.clearInterval(intervalId);
+
+        }, 3000);
+      }
+    }
+  };
+
+  const onFinish = () => {
+    window.clearInterval(timeId);
+    setWxpayOpen(false)
   };
 
   const getUserQuota = async () => {
@@ -168,6 +220,7 @@ const TopUp = () => {
       if (status.enable_online_topup) {
         setEnableOnlineTopUp(status.enable_online_topup);
       }
+      setPayType(status.pay_type);
     }
     getUserQuota().then();
   }, []);
@@ -229,6 +282,31 @@ const TopUp = () => {
             <p>充值数量：{topUpCount}</p>
             <p>实付金额：{renderAmount()}</p>
             <p>是否确认充值？</p>
+          </Modal>
+          <Modal
+            title='付款'
+            visible={wxpayOpen}
+            onCancel={() => setWxpayOpen(false)}
+            maskClosable={false}
+            size={'small'}
+            centered={true}
+          >
+            <div style={{maxWidth: '100%', textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
+              {status == "active" && (
+                <Countdown
+                  title='订单创建成功，请扫码支付'
+                  value={deadline}
+                  onFinish={onFinish}
+                />
+              )}
+              <QRCode
+                value={qrCodeUrl}
+                size={200}
+                status={status}
+                bgColor={"white"}
+              />
+            </div>
+
           </Modal>
           <div
             style={{ marginTop: 20, display: 'flex', justifyContent: 'center' }}
@@ -293,15 +371,17 @@ const TopUp = () => {
                     }}
                   />
                   <Space>
-                    <Button
-                      type={'primary'}
-                      theme={'solid'}
-                      onClick={async () => {
-                        preTopUp('zfb');
-                      }}
-                    >
-                      支付宝
-                    </Button>
+                    {payType == "easy" && (
+                      <Button
+                        type={'primary'}
+                        theme={'solid'}
+                        onClick={async () => {
+                          preTopUp('zfb');
+                        }}
+                      >
+                        支付宝
+                      </Button>
+                    )}
                     <Button
                       style={{
                         backgroundColor: 'rgba(var(--semi-green-5), 1)',

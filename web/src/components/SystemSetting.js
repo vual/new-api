@@ -53,6 +53,12 @@ const SystemSetting = () => {
     TelegramOAuthEnabled: '',
     TelegramBotToken: '',
     TelegramBotName: '',
+    WxPayAppId: '',
+    WxPayMchId: '',
+    WxPayApiV3Key: '',
+    WxPaySerialNo: '',
+    WxPayKeyPath: '',
+    WxPayCertPath: '',
   });
   const [originInputs, setOriginInputs] = useState({});
   let [loading, setLoading] = useState(false);
@@ -163,7 +169,14 @@ const SystemSetting = () => {
       name === 'EmailDomainWhitelist' ||
       name === 'TopupGroupRatio' ||
       name === 'TelegramBotToken' ||
-      name === 'TelegramBotName'
+      name === 'TelegramBotName' ||
+      name === 'WxPayAppId' ||
+      name === 'WxPayMchId' ||
+      name === 'WxPayApiV3Key' ||
+      name === 'WxPaySerialNo' ||
+      name === 'WxPayKeyPath' ||
+      name === 'WxPayCertPath'
+
     ) {
       setInputs((inputs) => ({ ...inputs, [name]: value }));
     } else {
@@ -203,6 +216,24 @@ const SystemSetting = () => {
     }
     if (inputs.EpayKey !== undefined && inputs.EpayKey !== '') {
       await updateOption('EpayKey', inputs.EpayKey);
+    }
+    if (inputs.WxPayAppId !== undefined && inputs.WxPayAppId !== '') {
+      await updateOption('WxPayAppId', inputs.WxPayAppId);
+    }
+    if (inputs.WxPayMchId !== undefined && inputs.WxPayMchId !== '') {
+      await updateOption('WxPayMchId', inputs.WxPayMchId);
+    }
+    if (inputs.WxPayApiV3Key !== undefined && inputs.WxPayApiV3Key !== '') {
+      await updateOption('WxPayApiV3Key', inputs.WxPayApiV3Key);
+    }
+    if (inputs.WxPaySerialNo !== undefined && inputs.WxPaySerialNo !== '') {
+      await updateOption('WxPaySerialNo', inputs.WxPaySerialNo);
+    }
+    if (inputs.WxPayKeyPath !== undefined && inputs.WxPayKeyPath !== '') {
+      await updateOption('WxPayKeyPath', inputs.WxPayKeyPath);
+    }
+    if (inputs.WxPayCertPath !== undefined && inputs.WxPayCertPath !== '') {
+      await updateOption('WxPayCertPath', inputs.WxPayCertPath);
     }
     await updateOption('Price', '' + inputs.Price);
   };
@@ -363,11 +394,11 @@ const SystemSetting = () => {
           </Form.Button>
           <Divider />
           <Header as='h3' inverted={isDark}>
-            支付设置（当前仅支持易支付接口，默认使用上方服务器地址作为回调地址！）
+            支付设置（当前支持易支付和微信支付，默认使用上方服务器地址作为回调地址！）
           </Header>
           <Form.Group widths='equal'>
             <Form.Input
-              label='支付地址，不填写则不启用在线支付'
+              label='易支付地址，不填写则不启用在线支付'
               placeholder='例如：https://yourdomain.com'
               value={inputs.PayAddress}
               name='PayAddress'
@@ -385,6 +416,52 @@ const SystemSetting = () => {
               placeholder='敏感信息不会发送到前端显示'
               value={inputs.EpayKey}
               name='EpayKey'
+              onChange={handleInputChange}
+            />
+          </Form.Group>
+          <Form.Group widths='equal'>
+            <Form.Input
+              label='微信支付appId'
+              placeholder=''
+              value={inputs.WxPayAppId}
+              name='WxPayAppId'
+              onChange={handleInputChange}
+            />
+            <Form.Input
+              label='微信支付商户ID'
+              placeholder=''
+              value={inputs.WxPayMchId}
+              name='WxPayMchId'
+              onChange={handleInputChange}
+            />
+            <Form.Input
+              label='微信支付apiv3密钥'
+              placeholder='敏感信息不会发送到前端显示'
+              value={inputs.WxPayApiV3Key}
+              name='WxPayApiV3Key'
+              onChange={handleInputChange}
+            />
+          </Form.Group>
+          <Form.Group widths='equal'>
+            <Form.Input
+              label='微信支付证书序列号'
+              placeholder=''
+              value={inputs.WxPaySerialNo}
+              name='WxPaySerialNo'
+              onChange={handleInputChange}
+            />
+            <Form.Input
+              label='微信支付key路径'
+              placeholder='例如：/data/cert/apiclient_key.pem'
+              value={inputs.WxPayKeyPath}
+              name='WxPayKeyPath'
+              onChange={handleInputChange}
+            />
+            <Form.Input
+              label='微信支付cert路径'
+              placeholder='例如：/data/cert/apiclient_cert.pem'
+              value={inputs.WxPayCertPath}
+              name='WxPayCertPath'
               onChange={handleInputChange}
             />
           </Form.Group>

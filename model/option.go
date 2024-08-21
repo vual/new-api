@@ -106,6 +106,12 @@ func InitOptionMap() {
 	common.OptionMap["StopOnSensitiveEnabled"] = strconv.FormatBool(constant.StopOnSensitiveEnabled)
 	common.OptionMap["SensitiveWords"] = constant.SensitiveWordsToString()
 	common.OptionMap["StreamCacheQueueLength"] = strconv.Itoa(constant.StreamCacheQueueLength)
+	common.OptionMap["WxPayAppId"] = ""
+	common.OptionMap["WxPayMchId"] = ""
+	common.OptionMap["WxPayApiV3Key"] = ""
+	common.OptionMap["WxPaySerialNo"] = ""
+	common.OptionMap["WxPayKeyPath"] = ""
+	common.OptionMap["WxPayCertPath"] = ""
 
 	common.OptionMapRWMutex.Unlock()
 	loadOptionsFromDatabase()
@@ -321,6 +327,18 @@ func updateOptionMap(key string, value string) (err error) {
 		constant.SensitiveWordsFromString(value)
 	case "StreamCacheQueueLength":
 		constant.StreamCacheQueueLength, _ = strconv.Atoi(value)
+	case "WxPayAppId":
+		constant.WxPayAppId = value
+	case "WxPayMchId":
+		constant.WxPayMchId = value
+	case "WxPayApiV3Key":
+		constant.WxPayApiV3Key = value
+	case "WxPaySerialNo":
+		constant.WxPaySerialNo = value
+	case "WxPayKeyPath":
+		constant.WxPayKeyPath = value
+	case "WxPayCertPath":
+		constant.WxPayCertPath = value
 	}
 	return err
 }

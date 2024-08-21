@@ -29,6 +29,10 @@ func TestStatus(c *gin.Context) {
 }
 
 func GetStatus(c *gin.Context) {
+	pay_type := "easy"
+	if constant.WxPayApiV3Key != "" && constant.WxPaySerialNo != "" {
+		pay_type = "wx"
+	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "",
@@ -61,8 +65,9 @@ func GetStatus(c *gin.Context) {
 			"enable_data_export":       common.DataExportEnabled,
 			"data_export_default_time": common.DataExportDefaultTime,
 			"default_collapse_sidebar": common.DefaultCollapseSidebar,
-			"enable_online_topup":      constant.PayAddress != "" && constant.EpayId != "" && constant.EpayKey != "",
+			"enable_online_topup":      (constant.PayAddress != "" && constant.EpayId != "" && constant.EpayKey != "") || constant.WxPayApiV3Key != "",
 			"mj_notify_enabled":        constant.MjNotifyEnabled,
+			"pay_type":                 pay_type,
 		},
 	})
 	return
