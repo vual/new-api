@@ -81,9 +81,26 @@ func UpdateTaskByPlatform(platform constant.TaskPlatform, taskChannelM map[int][
 
 func UpdateSunoTaskAll(ctx context.Context, taskChannelM map[int][]string, taskM map[string]*model.Task) error {
 	for channelId, taskIds := range taskChannelM {
-		err := updateSunoTaskAll(ctx, channelId, taskIds, taskM)
+		// 需要区分不同接口的任务
+		var sunoArr []string
+		var sunoAIArr []string
+
+		// 遍历字符串数组
+		for _, taskId := range taskIds {
+			if taskM[taskId].Action == "sunoai_music" || taskM[taskId].Action == "sunoai_lyrics" {
+				sunoAIArr = append(sunoAIArr, taskId)
+			} else {
+				sunoArr = append(sunoArr, taskId)
+			}
+		}
+
+		err := updateSunoTaskAll(ctx, channelId, sunoArr, taskM)
+		err1 := updateSunoAITaskAll(ctx, channelId, sunoAIArr, taskM)
 		if err != nil {
 			common.LogError(ctx, fmt.Sprintf("渠道 #%d 更新异步任务失败: %d", channelId, err.Error()))
+		}
+		if err1 != nil {
+			common.LogError(ctx, fmt.Sprintf("渠道 #%d 更新sunoai异步任务失败: %d", channelId, err.Error()))
 		}
 	}
 	return nil
@@ -175,7 +192,132 @@ func updateSunoTaskAll(ctx context.Context, channelId int, taskIds []string, tas
 
 		err = task.Update()
 		if err != nil {
-			common.SysError("UpdateMidjourneyTask task error: " + err.Error())
+			common.SysError("UpdateSunoTask task error: " + err.Error())
+		}
+	}
+	return nil
+}
+
+func updateSunoAITaskAll(ctx context.Context, channelId int, taskIds []string, taskM map[string]*model.Task) error {
+	common.LogInfo(ctx, fmt.Sprintf("渠道 #%d 未完成的sunoia任务有: %d", channelId, len(taskIds)))
+	if len(taskIds) == 0 {
+		return nil
+	}
+	channel, err := model.CacheGetChannel(channelId)
+	if err != nil {
+		common.SysLog(fmt.Sprintf("CacheGetChannel: %v", err))
+		err = model.TaskBulkUpdate(taskIds, map[string]any{
+			"fail_reason": fmt.Sprintf("获取渠道信息失败，请联系管理员，渠道ID：%d", channelId),
+			"status":      "FAILURE",
+			"progress":    "100%",
+		})
+		if err != nil {
+			common.SysError(fmt.Sprintf("UpdateMidjourneyTask error2: %v", err))
+		}
+		return err
+	}
+	adaptor := relay.GetSunoAIAdaptor(constant.TaskPlatformSuno)
+	if adaptor == nil {
+		return errors.New("adaptor not found")
+	}
+	for _, taskId := range taskIds {
+		fetchErr := false
+		task := taskM[taskId]
+		resp, err := adaptor.FetchTaskSingle(*channel.BaseURL, channel.Key, taskId, task.Action)
+		if err != nil {
+			common.SysError(fmt.Sprintf("Get Task Do req error: %v", err))
+			fetchErr = true
+		}
+		if resp.StatusCode != http.StatusOK {
+			common.LogError(ctx, fmt.Sprintf("Get Task status code: %d", resp.StatusCode))
+			fetchErr = true
+		}
+		defer resp.Body.Close()
+		responseBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			common.SysError(fmt.Sprintf("Get Task parse body error: %v", err))
+			fetchErr = true
+		}
+
+		failed := false
+		if task.Action == "sunoai_music" {
+			var clips []map[string]interface{}
+			err = json.Unmarshal(responseBody, &clips)
+			if err != nil {
+				common.LogError(ctx, fmt.Sprintf("Get Task parse body error2: %v, body: %s", err, string(responseBody)))
+				fetchErr = true
+			}
+			if !fetchErr {
+				finish := true
+				for _, clip := range clips {
+					// 将每个 clip 断言为 map[string]interface{}
+					if clipStatus, ok := clip["status"].(string); ok {
+						if clipStatus != "complete" {
+							finish = false
+						}
+						if clipStatus == "error" {
+							failed = true
+						}
+					}
+				}
+				if finish {
+					task.Status = "SUCCESS"
+					task.Progress = "100%"
+					task.FinishTime = time.Now().UnixNano() / int64(time.Millisecond)
+				}
+			}
+
+		} else {
+			var result map[string]interface{}
+			err = json.Unmarshal(responseBody, &result)
+			if err != nil {
+				common.LogError(ctx, fmt.Sprintf("Get Task parse body error2: %v, body: %s", err, string(responseBody)))
+				fetchErr = true
+			}
+			if !fetchErr {
+				task.Status = lo.If(model.TaskStatus(result["status"].(string)) != "", model.TaskStatus(result["status"].(string))).Else(task.Status)
+				if task.Status == "complete" {
+					task.Status = "SUCCESS"
+					task.Progress = "100%"
+					task.FinishTime = time.Now().UnixNano() / int64(time.Millisecond)
+				}
+			}
+		}
+
+		// 超时失败
+		nowTime := time.Now().UnixNano() / int64(time.Millisecond)
+		if (task.StartTime + int64(10*time.Minute)) < nowTime {
+			failed = true
+		}
+
+		if failed {
+			task.Status = "FAILED"
+			task.FailReason = "查询状态失败"
+			task.Progress = "100%"
+			common.LogInfo(ctx, task.TaskID+" sunoai任务失败，"+task.FailReason)
+			err = model.CacheUpdateUserQuota(task.UserId)
+			if err != nil {
+				common.LogError(ctx, "error update user quota cache: "+err.Error())
+			} else {
+				quota := task.Quota
+				if quota != 0 {
+					err = model.IncreaseUserQuota(task.UserId, quota)
+					if err != nil {
+						common.LogError(ctx, "fail to increase user quota: "+err.Error())
+					}
+					logContent := fmt.Sprintf("异步任务执行失败 %s，补偿 %s", task.TaskID, common.LogQuota(quota))
+					model.RecordLog(task.UserId, model.LogTypeSystem, logContent)
+				}
+			}
+		}
+
+		if !fetchErr || failed {
+			task.Data = responseBody
+
+			err = task.Update()
+			if err != nil {
+				common.SysError("UpdateSunoAITask task error: " + err.Error())
+			}
 		}
 	}
 	return nil

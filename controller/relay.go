@@ -272,6 +272,16 @@ func taskRelayHandler(c *gin.Context, relayMode int) *dto.TaskError {
 	switch relayMode {
 	case relayconstant.RelayModeSunoFetch, relayconstant.RelayModeSunoFetchByID:
 		err = relay.RelayTaskFetch(c, relayMode)
+	case relayconstant.RelayModeSunoSubmit:
+		err = relay.RelayTaskSubmit(c, relayMode)
+	case relayconstant.RelayModeSunoGenerate:
+		err = relay.RelaySunoGenerate(c, relayMode)
+	case relayconstant.RelayModeSunoGenerateLyrics:
+		err = relay.RelaySunoGenerate(c, relayMode)
+	case relayconstant.RelayModeSunoFeed:
+		err = relay.RelaySunoFeed(c, relayMode)
+	case relayconstant.RelayModeSunoFeedLyrics:
+		err = relay.RelaySunoFeed(c, relayMode)
 	default:
 		err = relay.RelayTaskSubmit(c, relayMode)
 	}

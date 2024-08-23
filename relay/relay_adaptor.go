@@ -18,6 +18,7 @@ import (
 	"one-api/relay/channel/perplexity"
 	"one-api/relay/channel/siliconflow"
 	"one-api/relay/channel/task/suno"
+	"one-api/relay/channel/task/sunoai"
 	"one-api/relay/channel/tencent"
 	"one-api/relay/channel/xunfei"
 	"one-api/relay/channel/zhipu"
@@ -75,6 +76,16 @@ func GetTaskAdaptor(platform commonconstant.TaskPlatform) channel.TaskAdaptor {
 	//	return &aiproxy.Adaptor{}
 	case commonconstant.TaskPlatformSuno:
 		return &suno.TaskAdaptor{}
+	}
+	return nil
+}
+
+func GetSunoAIAdaptor(platform commonconstant.TaskPlatform) channel.TaskAdaptor {
+	switch platform {
+	//case constant.APITypeAIProxyLibrary:
+	//	return &aiproxy.Adaptor{}
+	case commonconstant.TaskPlatformSuno:
+		return &sunoai.TaskAdaptor{}
 	}
 	return nil
 }

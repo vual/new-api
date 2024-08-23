@@ -20,6 +20,10 @@ type ModelRequest struct {
 	Model string `json:"model"`
 }
 
+type SunoModelRequest struct {
+	Model string `json:"mv"`
+}
+
 func Distribute() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		userId := c.GetInt("id")
@@ -133,11 +137,23 @@ func getModelRequest(c *gin.Context) (*ModelRequest, bool, error) {
 	} else if strings.Contains(c.Request.URL.Path, "/suno/") {
 		relayMode := relayconstant.Path2RelaySuno(c.Request.Method, c.Request.URL.Path)
 		if relayMode == relayconstant.RelayModeSunoFetch ||
-			relayMode == relayconstant.RelayModeSunoFetchByID {
+			relayMode == relayconstant.RelayModeSunoFetchByID ||
+			relayMode == relayconstant.RelayModeSunoFeed ||
+			relayMode == relayconstant.RelayModeSunoFeedLyrics {
 			shouldSelectChannel = false
-		} else {
+		} else if relayMode == relayconstant.RelayModeSunoSubmit {
 			modelName := service.CoverTaskActionToModelName(constant.TaskPlatformSuno, c.Param("action"))
 			modelRequest.Model = modelName
+		} else if relayMode == relayconstant.RelayModeSunoGenerateLyrics {
+			modelRequest.Model = "chirp-lyrics"
+		} else {
+			var sunoModelRequest SunoModelRequest
+			err = common.UnmarshalBodyReusable(c, &sunoModelRequest)
+			if err != nil {
+				modelRequest.Model = "chirp-v3-5"
+			} else {
+				modelRequest.Model = sunoModelRequest.Model
+			}
 		}
 		c.Set("platform", string(constant.TaskPlatformSuno))
 		c.Set("relay_mode", relayMode)

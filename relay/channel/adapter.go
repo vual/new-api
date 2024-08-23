@@ -40,4 +40,6 @@ type TaskAdaptor interface {
 
 	// FetchTask
 	FetchTask(baseUrl, key string, body map[string]any) (*http.Response, error)
+	// FetchTask
+	FetchTaskSingle(baseUrl, key string, taskId string, action string) (*http.Response, error)
 }

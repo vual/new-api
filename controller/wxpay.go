@@ -125,7 +125,7 @@ func WxPayNative(c *gin.Context) {
 	log.Printf("status=%d resp=%s", result.Response.StatusCode, resp)
 
 	// 放入redis
-	common.RedisSet("order::"+tradeNo, topUp.Status, time.Duration(6)*time.Minute)
+	common.RedisSet("topup_order::"+tradeNo, topUp.Status, time.Duration(6)*time.Minute)
 
 	c.JSON(200, gin.H{"message": "success", "data": tradeNo, "url": resp.CodeUrl})
 }
@@ -184,7 +184,7 @@ func WxPayNotify(c *gin.Context) {
 		model.RecordLog(topUp.UserId, model.LogTypeTopup, fmt.Sprintf("使用在线充值成功，充值金额: %v，支付金额：%f", common.LogQuota(topUp.Amount*int(common.QuotaPerUnit)), topUp.Money))
 
 		// 更新redis里的状态
-		common.RedisSet("order::"+tradeNo, topUp.Status, time.Duration(6)*time.Minute)
+		common.RedisSet("topup_order::"+tradeNo, topUp.Status, time.Duration(6)*time.Minute)
 	}
 
 	// 响应微信服务器
@@ -193,7 +193,7 @@ func WxPayNotify(c *gin.Context) {
 
 func WxPayCheckOrder(c *gin.Context) {
 	orderId := c.Query("orderId")
-	status, error := common.RedisGet("order::" + orderId)
+	status, error := common.RedisGet("topup_order::" + orderId)
 	if error != nil {
 		c.JSON(200, gin.H{"message": "failed"})
 	}

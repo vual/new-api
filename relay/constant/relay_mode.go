@@ -36,6 +36,10 @@ const (
 	RelayModeSunoFetch
 	RelayModeSunoFetchByID
 	RelayModeSunoSubmit
+	RelayModeSunoGenerate
+	RelayModeSunoGenerateLyrics
+	RelayModeSunoFeed
+	RelayModeSunoFeedLyrics
 
 	RelayModeRerank
 )
@@ -115,6 +119,14 @@ func Path2RelaySuno(method, path string) int {
 		relayMode = RelayModeSunoFetchByID
 	} else if strings.Contains(path, "/submit/") {
 		relayMode = RelayModeSunoSubmit
+	} else if method == http.MethodPost && strings.HasSuffix(path, "/generate") {
+		relayMode = RelayModeSunoGenerate
+	} else if method == http.MethodPost && strings.Contains(path, "/lyrics") {
+		relayMode = RelayModeSunoGenerateLyrics
+	} else if method == http.MethodGet && strings.Contains(path, "/feed") {
+		relayMode = RelayModeSunoFeed
+	} else if method == http.MethodGet && strings.Contains(path, "/lyrics") {
+		relayMode = RelayModeSunoFeedLyrics
 	}
 	return relayMode
 }

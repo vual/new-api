@@ -3,7 +3,6 @@ package relay
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/gin-gonic/gin"
@@ -16,32 +15,30 @@ import (
 	relaycommon "one-api/relay/common"
 	relayconstant "one-api/relay/constant"
 	"one-api/service"
+	"time"
 )
 
-/*
-Task 任务通过平台、Action 区分任务
-*/
-func RelayTaskSubmit(c *gin.Context, relayMode int) (taskErr *dto.TaskError) {
+func RelaySunoGenerate(c *gin.Context, relayMode int) (taskErr *dto.TaskError) {
 	platform := constant.TaskPlatform(c.GetString("platform"))
 	relayInfo := relaycommon.GenTaskRelayInfo(c)
 
-	adaptor := GetTaskAdaptor(platform)
+	adaptor := GetSunoAIAdaptor(platform)
 	if adaptor == nil {
 		return service.TaskErrorWrapperLocal(fmt.Errorf("invalid api platform: %s", platform), "invalid_api_platform", http.StatusBadRequest)
 	}
 	adaptor.Init(relayInfo)
 	// get & validate taskRequest 获取并验证文本请求
-	taskErr = adaptor.ValidateRequestAndSetAction(c, relayInfo)
-	if taskErr != nil {
-		return
-	}
+	//taskErr = adaptor.ValidateRequestAndSetAction(c, relayInfo)
+	//if taskErr != nil {
+	//	return
+	//}
 
-	modelName := service.CoverTaskActionToModelName(platform, relayInfo.Action)
+	modelName := c.GetString("original_model")
 	modelPrice, success := common.GetModelPrice(modelName, true)
 	if !success {
 		defaultPrice, ok := common.GetDefaultModelRatioMap()[modelName]
 		if !ok {
-			modelPrice = 0.1
+			modelPrice = 0.15
 		} else {
 			modelPrice = defaultPrice
 		}
@@ -90,13 +87,13 @@ func RelayTaskSubmit(c *gin.Context, relayMode int) (taskErr *dto.TaskError) {
 	}
 
 	// build body
-	requestBody, err := adaptor.BuildRequestBody(c, relayInfo)
-	if err != nil {
-		taskErr = service.TaskErrorWrapper(err, "build_request_failed", http.StatusInternalServerError)
-		return
-	}
+	//requestBody, err := adaptor.BuildRequestBody(c, relayInfo)
+	//if err != nil {
+	//	taskErr = service.TaskErrorWrapper(err, "build_request_failed", http.StatusInternalServerError)
+	//	return
+	//}
 	// do request
-	resp, err := adaptor.DoRequest(c, relayInfo, requestBody)
+	resp, err := adaptor.DoRequest(c, relayInfo, c.Request.Body)
 	if err != nil {
 		taskErr = service.TaskErrorWrapper(err, "do_request_failed", http.StatusInternalServerError)
 		return
@@ -142,6 +139,13 @@ func RelayTaskSubmit(c *gin.Context, relayMode int) (taskErr *dto.TaskError) {
 	task.TaskID = taskID
 	task.Quota = quota
 	task.Data = taskData
+	if relayMode == relayconstant.RelayModeSunoGenerate {
+		task.Action = "sunoai_music"
+	} else if relayMode == relayconstant.RelayModeSunoGenerateLyrics {
+		task.Action = "sunoai_lyrics"
+	}
+	task.SubmitTime = time.Now().UnixNano() / int64(time.Millisecond)
+	task.StartTime = task.SubmitTime
 	err = task.Insert()
 	if err != nil {
 		taskErr = service.TaskErrorWrapper(err, "insert_task_failed", http.StatusInternalServerError)
@@ -150,14 +154,7 @@ func RelayTaskSubmit(c *gin.Context, relayMode int) (taskErr *dto.TaskError) {
 	return nil
 }
 
-var fetchRespBuilders = map[int]func(c *gin.Context) (respBody []byte, taskResp *dto.TaskError){
-	relayconstant.RelayModeSunoFetchByID:  sunoFetchByIDRespBodyBuilder,
-	relayconstant.RelayModeSunoFetch:      sunoFetchRespBodyBuilder,
-	relayconstant.RelayModeSunoFeed:       sunoFeedByIDRespBodyBuilder,
-	relayconstant.RelayModeSunoFeedLyrics: sunoFeedByIDRespBodyBuilder,
-}
-
-func RelayTaskFetch(c *gin.Context, relayMode int) (taskResp *dto.TaskError) {
+func RelaySunoFeed(c *gin.Context, relayMode int) (taskResp *dto.TaskError) {
 	respBuilder, ok := fetchRespBuilders[relayMode]
 	if !ok {
 		taskResp = service.TaskErrorWrapperLocal(errors.New("invalid_relay_mode"), "invalid_relay_mode", http.StatusBadRequest)
@@ -175,88 +172,4 @@ func RelayTaskFetch(c *gin.Context, relayMode int) (taskResp *dto.TaskError) {
 		return
 	}
 	return
-}
-
-func sunoFetchRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dto.TaskError) {
-	userId := c.GetInt("id")
-	var condition = struct {
-		IDs    []any  `json:"ids"`
-		Action string `json:"action"`
-	}{}
-	err := c.BindJSON(&condition)
-	if err != nil {
-		taskResp = service.TaskErrorWrapper(err, "invalid_request", http.StatusBadRequest)
-		return
-	}
-	var tasks []any
-	if len(condition.IDs) > 0 {
-		taskModels, err := model.GetByTaskIds(userId, condition.IDs)
-		if err != nil {
-			taskResp = service.TaskErrorWrapper(err, "get_tasks_failed", http.StatusInternalServerError)
-			return
-		}
-		for _, task := range taskModels {
-			tasks = append(tasks, TaskModel2Dto(task))
-		}
-	} else {
-		tasks = make([]any, 0)
-	}
-	respBody, err = json.Marshal(dto.TaskResponse[[]any]{
-		Code: "success",
-		Data: tasks,
-	})
-	return
-}
-
-func sunoFetchByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dto.TaskError) {
-	taskId := c.Param("id")
-	userId := c.GetInt("id")
-
-	originTask, exist, err := model.GetByTaskId(userId, taskId)
-	if err != nil {
-		taskResp = service.TaskErrorWrapper(err, "get_task_failed", http.StatusInternalServerError)
-		return
-	}
-	if !exist {
-		taskResp = service.TaskErrorWrapperLocal(errors.New("task_not_exist"), "task_not_exist", http.StatusBadRequest)
-		return
-	}
-
-	respBody, err = json.Marshal(dto.TaskResponse[any]{
-		Code: "success",
-		Data: TaskModel2Dto(originTask),
-	})
-	return
-}
-
-func sunoFeedByIDRespBodyBuilder(c *gin.Context) (respBody []byte, taskResp *dto.TaskError) {
-	taskId := c.Param("id")
-	userId := c.GetInt("id")
-
-	originTask, exist, err := model.GetByTaskId(userId, taskId)
-	if err != nil {
-		taskResp = service.TaskErrorWrapper(err, "get_task_failed", http.StatusInternalServerError)
-		return
-	}
-	if !exist {
-		taskResp = service.TaskErrorWrapperLocal(errors.New("task_not_exist"), "task_not_exist", http.StatusBadRequest)
-		return
-	}
-
-	respBody, err = originTask.Data, nil
-	return
-}
-
-func TaskModel2Dto(task *model.Task) *dto.TaskDto {
-	return &dto.TaskDto{
-		TaskID:     task.TaskID,
-		Action:     task.Action,
-		Status:     string(task.Status),
-		FailReason: task.FailReason,
-		SubmitTime: task.SubmitTime,
-		StartTime:  task.StartTime,
-		FinishTime: task.FinishTime,
-		Progress:   task.Progress,
-		Data:       task.Data,
-	}
 }

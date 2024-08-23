@@ -1,4 +1,4 @@
-package suno
+package sunoai
 
 import (
 	"bytes"
@@ -56,7 +56,7 @@ func (a *TaskAdaptor) ValidateRequestAndSetAction(c *gin.Context, info *relaycom
 
 func (a *TaskAdaptor) BuildRequestURL(info *relaycommon.TaskRelayInfo) (string, error) {
 	baseURL := info.BaseUrl
-	fullRequestURL := fmt.Sprintf("%s%s", baseURL, "/suno/submit/"+info.Action)
+	fullRequestURL := fmt.Sprintf("%s%s", baseURL, info.RequestURLPath)
 	return fullRequestURL, nil
 }
 
@@ -92,16 +92,16 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		taskErr = service.TaskErrorWrapper(err, "read_response_body_failed", http.StatusInternalServerError)
 		return
 	}
-	var sunoResponse dto.TaskResponse[string]
-	err = json.Unmarshal(responseBody, &sunoResponse)
+	var result map[string]interface{}
+	err = json.Unmarshal(responseBody, &result)
 	if err != nil {
 		taskErr = service.TaskErrorWrapper(err, "unmarshal_response_body_failed", http.StatusInternalServerError)
 		return
 	}
-	if !sunoResponse.IsSuccess() {
-		taskErr = service.TaskErrorWrapper(fmt.Errorf(sunoResponse.Message), sunoResponse.Code, http.StatusInternalServerError)
-		return
-	}
+	//if !sunoResponse.IsSuccess() {
+	//	taskErr = service.TaskErrorWrapper(fmt.Errorf(sunoResponse.Message), sunoResponse.Code, http.StatusInternalServerError)
+	//	return
+	//}
 
 	for k, v := range resp.Header {
 		c.Writer.Header().Set(k, v[0])
@@ -115,7 +115,26 @@ func (a *TaskAdaptor) DoResponse(c *gin.Context, resp *http.Response, info *rela
 		return
 	}
 
-	return sunoResponse.Data, nil, nil
+	var taskId string
+	if clips, ok := result["clips"].([]interface{}); ok {
+		var ids []string
+		for _, clip := range clips {
+			// 将每个 clip 断言为 map[string]interface{}
+			if clipMap, ok := clip.(map[string]interface{}); ok {
+				if id, ok := clipMap["id"].(string); ok {
+					ids = append(ids, id)
+				}
+			}
+		}
+		taskId = strings.Join(ids, ",")
+		clipsData, err := json.Marshal(clips)
+		if err == nil {
+			return taskId, clipsData, nil
+		}
+	} else if id, ok := result["id"].(string); ok {
+		taskId = id
+	}
+	return taskId, responseBody, nil
 }
 
 func (a *TaskAdaptor) GetModelList() []string {
@@ -127,35 +146,34 @@ func (a *TaskAdaptor) GetChannelName() string {
 }
 
 func (a *TaskAdaptor) FetchTask(baseUrl, key string, body map[string]any) (*http.Response, error) {
-	requestUrl := fmt.Sprintf("%s/suno/fetch", baseUrl)
-	byteBody, err := json.Marshal(body)
-	if err != nil {
-		return nil, err
+	return nil, nil
+}
+
+func (a *TaskAdaptor) FetchTaskSingle(baseUrl, key string, taskId string, action string) (*http.Response, error) {
+	var requestUrl string
+	if action == "sunoai_music" {
+		requestUrl = fmt.Sprintf("%s/suno/feed/%s", baseUrl, taskId)
+	} else {
+		requestUrl = fmt.Sprintf("%s/suno/lyrics/%s", baseUrl, taskId)
 	}
 
-	req, err := http.NewRequest("POST", requestUrl, bytes.NewBuffer(byteBody))
+	req, err := http.NewRequest("GET", requestUrl, nil)
 	if err != nil {
 		common.SysError(fmt.Sprintf("Get Task error: %v", err))
 		return nil, err
 	}
-	defer req.Body.Close()
 	// 设置超时时间
 	timeout := time.Second * 15
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	// 使用带有超时的 context 创建新的请求
 	req = req.WithContext(ctx)
-	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+key)
 	resp, err := service.GetHttpClient().Do(req)
 	if err != nil {
 		return nil, err
 	}
 	return resp, nil
-}
-
-func (a *TaskAdaptor) FetchTaskSingle(baseUrl, key string, taskId string, action string) (*http.Response, error) {
-	return nil, nil
 }
 
 func actionValidate(c *gin.Context, sunoRequest *dto.SunoSubmitReq, action string) (err error) {

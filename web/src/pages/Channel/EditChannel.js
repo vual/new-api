@@ -130,6 +130,9 @@ const EditChannel = (props) => {
           localModels = [
             'suno_music',
             'suno_lyrics',
+            'chirp-v3-5',
+            'chirp-v3-0',
+            'chirp-lyrics',
           ];
           break;
         default:
