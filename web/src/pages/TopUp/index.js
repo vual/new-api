@@ -179,7 +179,7 @@ const TopUp = () => {
       window.clearInterval(intervalId);
       setWxpayOpen(false);
     } else {
-      const res = await API.get('/api/user/checkOrder?orderId=' + orderId);
+      const res = await API.get('/api/user/check_order?orderId=' + orderId);
       if (!res) {
         showError("查询订单状态失败");
       } else if (res.data == "success") {
