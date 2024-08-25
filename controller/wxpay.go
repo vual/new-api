@@ -93,7 +93,7 @@ func WxPayNative(c *gin.Context) {
 		c.JSON(200, gin.H{"message": "error", "data": "创建订单失败"})
 		return
 	}
-	log.Printf("orderId: %d", topUp.Id)
+	//log.Printf("orderId: %d", topUp.Id)
 
 	ctx := context.Background()
 	client := GetWxPayClient(ctx)
@@ -104,7 +104,7 @@ func WxPayNative(c *gin.Context) {
 
 	svc := native.NativeApiService{Client: client}
 	// 发送请求
-	resp, result, err := svc.Prepay(ctx,
+	resp, _, err := svc.Prepay(ctx,
 		native.PrepayRequest{
 			Appid:       core.String(constant.WxPayAppId),
 			Mchid:       core.String(constant.WxPayMchId),
@@ -122,7 +122,7 @@ func WxPayNative(c *gin.Context) {
 		return
 	}
 	// 使用微信扫描 resp.code_url 对应的二维码，即可体验Native支付
-	log.Printf("status=%d resp=%s", result.Response.StatusCode, resp)
+	//log.Printf("status=%d resp=%s", result.Response.StatusCode, resp)
 
 	// 放入redis
 	common.RedisSet("topup_order::"+tradeNo, topUp.Status, time.Duration(6)*time.Minute)
