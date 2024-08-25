@@ -52,7 +52,7 @@ func SetApiRouter(router *gin.Engine) {
 				selfRoute.GET("/aff", controller.GetAffCode)
 				selfRoute.POST("/topup", controller.TopUp)
 				selfRoute.POST("/pay", controller.RequestEpay)
-				selfRoute.POST("/wxpay", controller.WxPayNative)
+				selfRoute.POST("/wechatpay", controller.WxPayNative)
 				selfRoute.GET("/checkOrder", controller.WxPayCheckOrder)
 				selfRoute.POST("/amount", controller.RequestAmount)
 				selfRoute.POST("/aff_transfer", controller.TransferAffQuota)

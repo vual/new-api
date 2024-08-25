@@ -111,7 +111,7 @@ const TopUp = () => {
     try {
       let url = '/api/user/pay';
       if (payType == "wx") {
-        url = '/api/user/wxpay';
+        url = '/api/user/wechatpay';
       }
       const res = await API.post(url, {
         amount: parseInt(topUpCount),
